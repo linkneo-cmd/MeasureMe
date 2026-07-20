@@ -9,7 +9,7 @@ export interface DimensionItem {
   width: number;
   height: number;
   unit: string;           // 默认 cm
-  photoPath?: string;     // 图片本地路径
+  photos: string[];       // 图片base64数组
   createdAt: Date;
 }
 
@@ -20,6 +20,15 @@ export class MyDatabase extends Dexie {
     super('DimensionsDB');
     this.version(1).stores({
       items: '++id, name, category, createdAt'
+    });
+    this.version(2).stores({
+      items: '++id, name, category, createdAt'
+    }).upgrade((trans) => {
+      trans.table('items').toCollection().modify((item: any) => {
+        if (!item.photos) {
+          item.photos = item.photoPath ? [item.photoPath] : [];
+        }
+      });
     });
   }
 }

@@ -11,7 +11,7 @@ import App from './App.vue'
 import 'vant/lib/index.css'
 
 // 2. 按需引入你需要的组件
-import { Form, Field, Button, List, Cell, Search, SwipeCell, Popup, Icon, Dialog, Empty } from 'vant'
+import { Form, Field, Button, List, Cell, Search, SwipeCell, Popup, Icon, Dialog, Empty, Tag } from 'vant'
 
 const app = createApp(App)
 app.use(Form)
@@ -25,4 +25,5 @@ app.use(Popup)
 app.use(Icon)
 app.use(Dialog)
 app.use(Empty)
+app.use(Tag)
 app.mount('#app')

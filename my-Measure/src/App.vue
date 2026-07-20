@@ -3,11 +3,33 @@
     <div class="search-section">
       <van-search
         v-model="searchKeyword"
-        placeholder="搜索名称、长、宽、高"
+        placeholder="搜索名称、分类、长、宽、高"
         background="#f5f6f7"
         shape="round"
         clearable
       />
+      <div class="category-tags" v-if="allCategories.length > 0">
+        <div class="category-tags-inner">
+          <van-tag type="default" class="category-tag tag-all" @click="filterByCategory('')">全部</van-tag>
+          <van-tag
+            v-for="cat in displayCategories"
+            :key="cat"
+            :class="['category-tag', `tag-${getCategoryColorIndex(cat)}`]"
+            :type="getCategoryType(cat)"
+            @click="filterByCategory(cat)"
+          >
+            {{ cat }}
+          </van-tag>
+          <van-tag
+            v-if="showMoreTag"
+            class="category-tag tag-more"
+            type="default"
+            @click="toggleCategories"
+          >
+            <van-icon :name="showAllCategories ? 'arrow-down' : 'more-o'" size="14" />
+          </van-tag>
+        </div>
+      </div>
     </div>
 
     <div class="list-section">
@@ -19,11 +41,44 @@
             placeholder="请输入名称"
             :rules="[{ required: true, message: '请填写名称' }]"
           />
+          <van-field
+            v-model="form.category"
+            label="分类"
+            placeholder="未分类"
+          />
           <div class="form-row">
             <van-field v-model="form.length" label="长" type="digit" placeholder="0" />
             <van-field v-model="form.width" label="宽" type="digit" placeholder="0" />
             <van-field v-model="form.height" label="高" type="digit" placeholder="0" />
           </div>
+          <div class="image-upload-section">
+            <div class="image-grid">
+              <div
+                v-for="(photo, index) in form.photos"
+                :key="index"
+                class="image-item"
+                @click="previewImage(photo)"
+              >
+                <img :src="photo" class="image-thumb" />
+                <van-icon name="cross" class="image-delete" @click.stop="removeFormPhoto(index)" />
+              </div>
+              <div
+                v-if="form.photos.length < 6"
+                class="image-upload-btn"
+                @click="triggerUpload('add')"
+              >
+                <van-icon name="plus" size="24" />
+              </div>
+            </div>
+          </div>
+          <input
+            ref="addFileInput"
+            type="file"
+            accept="image/*"
+            multiple
+            class="hidden-input"
+            @change="handleAddFileChange"
+          />
           <div class="form-actions">
             <van-button type="default" size="small" @click="cancelAdd">取消</van-button>
             <van-button type="primary" size="small" native-type="submit">确认添加</van-button>
@@ -41,7 +96,14 @@
           :title="item.name"
           :label="`${item.length} × ${item.width} × ${item.height} cm`"
           class="list-item"
+          @click="openDetail(item)"
         />
+          <!-- <template #right-icon>
+            <van-tag :type="getCategoryType(item.category)" class="list-category-tag">
+              {{ item.category }}
+            </van-tag>
+          </template> -->
+        <!-- </van-cell> -->
         <template #right>
           <div class="swipe-actions">
             <van-button type="primary" size="small" class="edit-btn" @click="openEdit(item)">编辑</van-button>
@@ -58,12 +120,13 @@
       <van-button type="primary" size="large" @click="showAddForm = true">
         记一下
       </van-button>
+      <div style="margin-top:5px; font-size: 12px; color: #999;">-Author: NeoZhy</div>
     </div>
 
     <van-popup
       v-model:show="showEditPopup"
       position="bottom"
-      :style="{ height: '60%' }"
+      :style="{ height: '70%' }"
       round
     >
       <div class="edit-popup">
@@ -78,15 +141,95 @@
             placeholder="请输入名称"
             :rules="[{ required: true, message: '请填写名称' }]"
           />
+          <van-field
+            v-model="editForm.category"
+            label="分类"
+            placeholder="未分类"
+          />
           <div class="form-row">
             <van-field v-model="editForm.length" label="长" type="digit" placeholder="0" />
             <van-field v-model="editForm.width" label="宽" type="digit" placeholder="0" />
             <van-field v-model="editForm.height" label="高" type="digit" placeholder="0" />
           </div>
+          <div class="image-upload-section">
+            <div class="image-grid">
+              <div
+                v-for="(photo, index) in editForm.photos"
+                :key="index"
+                class="image-item"
+                @click="previewImage(photo)"
+              >
+                <img :src="photo" class="image-thumb" />
+                <van-icon name="cross" class="image-delete" @click.stop="removeEditPhoto(index)" />
+              </div>
+              <div
+                v-if="editForm.photos.length < 6"
+                class="image-upload-btn"
+                @click="triggerUpload('edit')"
+              >
+                <van-icon name="plus" size="24" />
+              </div>
+            </div>
+          </div>
+          <input
+            ref="editFileInput"
+            type="file"
+            accept="image/*"
+            multiple
+            class="hidden-input"
+            @change="handleEditFileChange"
+          />
           <van-button type="primary" native-type="submit" block>保存修改</van-button>
         </van-form>
       </div>
     </van-popup>
+
+    <van-popup
+      v-model:show="showDetailPopup"
+      position="center"
+      :style="{ width: '90%', maxWidth: '400px', borderRadius: '16px' }"
+    >
+      <div class="detail-popup">
+        <div class="popup-header">
+          <h3>{{ detailItem?.name }}</h3>
+          <van-icon name="cross" @click="showDetailPopup = false" />
+        </div>
+        <div class="detail-content" v-if="detailItem">
+          <div class="detail-info">
+            <div class="info-row">
+              <span class="info-label">尺寸</span>
+              <span class="info-value">{{ detailItem.length }} × {{ detailItem.width }} × {{ detailItem.height }} cm</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">分类</span>
+              <van-tag :type="getCategoryType(detailItem.category)">
+                {{ detailItem.category }}
+              </van-tag>
+            </div>
+            <div class="info-row">
+              <span class="info-label">创建时间</span>
+              <span class="info-value">{{ formatDate(detailItem.createdAt) }}</span>
+            </div>
+          </div>
+          <div v-if="detailItem.photos && detailItem.photos.length > 0" class="detail-images">
+            <div class="image-grid">
+              <div
+                v-for="(photo, index) in detailItem.photos"
+                :key="index"
+                class="image-item"
+                @click="previewImage(photo)"
+              >
+                <img :src="photo" class="image-thumb" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </van-popup>
+
+    <div v-if="showImagePreview" class="image-preview-overlay" @click="closeImagePreview">
+      <img :src="previewImageUrl" class="preview-image" @click.stop />
+    </div>
 
     <van-dialog
       v-model:show="showDeleteConfirm"
@@ -105,10 +248,12 @@ import { reactive, ref, computed } from 'vue';
 import { useDimensions } from '@/composables/useDimensions';
 import { showToast } from 'vant';
 import type { DimensionItem } from '@/db/dexie';
+import { compressImages } from '@/utils/imageCompressor';
 
 const { items, addItem, deleteItem, updateItem } = useDimensions();
 
 const searchKeyword = ref('');
+const selectedCategory = ref('');
 const showAddForm = ref(false);
 
 const form = reactive({
@@ -117,8 +262,12 @@ const form = reactive({
   width: '',
   height: '',
   unit: 'cm',
-  category: '未分类'
+  category: '',
+  photos: [] as string[]
 });
+
+const addFileInput = ref<HTMLInputElement | null>(null);
+const editFileInput = ref<HTMLInputElement | null>(null);
 
 const showEditPopup = ref(false);
 const editingItem = ref<DimensionItem | null>(null);
@@ -128,24 +277,159 @@ const editForm = reactive({
   width: '',
   height: '',
   unit: 'cm',
-  category: '未分类'
+  category: '',
+  photos: [] as string[]
 });
+
+const showDetailPopup = ref(false);
+const detailItem = ref<DimensionItem | null>(null);
+
+const showImagePreview = ref(false);
+const previewImageUrl = ref('');
 
 const showDeleteConfirm = ref(false);
 const deletingItem = ref<DimensionItem | null>(null);
 
-const filteredItems = computed(() => {
-  if (!searchKeyword.value) return items.value;
-  const keyword = searchKeyword.value.toLowerCase();
-  return items.value.filter(item => {
-    return (
-      item.name.toLowerCase().includes(keyword) ||
-      String(item.length).includes(keyword) ||
-      String(item.width).includes(keyword) ||
-      String(item.height).includes(keyword)
-    );
-  });
+const showAllCategories = ref(false);
+const MAX_DISPLAY_CATEGORIES = 8;
+
+const allCategories = computed(() => {
+  const cats = [...new Set(items.value.map(item => item.category))];
+  return cats.length > 0 ? cats : [];
 });
+
+const displayCategories = computed(() => {
+  if (showAllCategories.value) return allCategories.value;
+  return allCategories.value.slice(0, MAX_DISPLAY_CATEGORIES);
+});
+
+const showMoreTag = computed(() => {
+  return allCategories.value.length > MAX_DISPLAY_CATEGORIES;
+});
+
+const getCategoryColorIndex = (category: string) => {
+  const colors = ['primary', 'success', 'warning', 'info', 'danger'];
+  let hash = 0;
+  for (let i = 0; i < category.length; i++) {
+    hash = category.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
+const getCategoryType = (category: string): 'primary' | 'success' | 'warning' | 'danger' | 'default' => {
+  const colors = ['primary', 'success', 'warning', 'danger'] as const;
+  let hash = 0;
+  for (let i = 0; i < category.length; i++) {
+    hash = category.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length] || 'default';
+};
+
+const filteredItems = computed(() => {
+  let result = items.value;
+  
+  if (selectedCategory.value) {
+    result = result.filter(item => item.category === selectedCategory.value);
+  }
+  
+  if (searchKeyword.value) {
+    const keyword = searchKeyword.value.toLowerCase();
+    result = result.filter(item => {
+      return (
+        item.name.toLowerCase().includes(keyword) ||
+        item.category.toLowerCase().includes(keyword) ||
+        String(item.length).includes(keyword) ||
+        String(item.width).includes(keyword) ||
+        String(item.height).includes(keyword)
+      );
+    });
+  }
+  
+  return result;
+});
+
+const filterByCategory = (category: string) => {
+  if (selectedCategory.value === category) {
+    selectedCategory.value = '';
+  } else {
+    selectedCategory.value = category;
+  }
+};
+
+const toggleCategories = () => {
+  showAllCategories.value = !showAllCategories.value;
+};
+
+const formatDate = (date: Date) => {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const triggerUpload = (type: 'add' | 'edit') => {
+  if (type === 'add' && addFileInput.value) {
+    addFileInput.value.click();
+  } else if (type === 'edit' && editFileInput.value) {
+    editFileInput.value.click();
+  }
+};
+
+const handleAddFileChange = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files || []);
+  if (files.length === 0) return;
+
+  const remaining = 6 - form.photos.length;
+  const selectedFiles = files.slice(0, remaining);
+
+  try {
+    showToast({ message: '正在压缩图片...', duration: 0 });
+    const compressedPhotos = await compressImages(selectedFiles);
+    form.photos.push(...compressedPhotos);
+    showToast({ message: '图片上传成功', duration: 1500 });
+  } catch {
+    showToast('图片处理失败');
+  }
+
+  input.value = '';
+};
+
+const handleEditFileChange = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files || []);
+  if (files.length === 0) return;
+
+  const remaining = 6 - editForm.photos.length;
+  const selectedFiles = files.slice(0, remaining);
+
+  try {
+    showToast({ message: '正在压缩图片...', duration: 0 });
+    const compressedPhotos = await compressImages(selectedFiles);
+    editForm.photos.push(...compressedPhotos);
+    showToast({ message: '图片上传成功', duration: 1500 });
+  } catch {
+    showToast('图片处理失败');
+  }
+
+  input.value = '';
+};
+
+const removeFormPhoto = (index: number) => {
+  form.photos.splice(index, 1);
+};
+
+const removeEditPhoto = (index: number) => {
+  editForm.photos.splice(index, 1);
+};
+
+const previewImage = (url: string) => {
+  previewImageUrl.value = url;
+  showImagePreview.value = true;
+};
+
+const closeImagePreview = () => {
+  showImagePreview.value = false;
+  previewImageUrl.value = '';
+};
 
 const onSubmit = async () => {
   if (!form.name) return showToast('请输入名称');
@@ -153,15 +437,17 @@ const onSubmit = async () => {
     ...form,
     length: Number(form.length) || 0,
     width: Number(form.width) || 0,
-    height: Number(form.height) || 0
+    height: Number(form.height) || 0,
+    category: form.category || '未分类',
+    photos: [...form.photos]
   });
-  Object.assign(form, { name: '', length: '', width: '', height: '' });
+  Object.assign(form, { name: '', length: '', width: '', height: '', category: '', photos: [] });
   showAddForm.value = false;
   showToast('添加成功');
 };
 
 const cancelAdd = () => {
-  Object.assign(form, { name: '', length: '', width: '', height: '' });
+  Object.assign(form, { name: '', length: '', width: '', height: '', category: '', photos: [] });
   showAddForm.value = false;
 };
 
@@ -173,7 +459,8 @@ const openEdit = (item: DimensionItem) => {
     width: String(item.width),
     height: String(item.height),
     unit: item.unit,
-    category: item.category
+    category: item.category,
+    photos: [...(item.photos || [])]
   });
   showEditPopup.value = true;
 };
@@ -184,10 +471,17 @@ const onEditSubmit = async () => {
     ...editForm,
     length: Number(editForm.length) || 0,
     width: Number(editForm.width) || 0,
-    height: Number(editForm.height) || 0
+    height: Number(editForm.height) || 0,
+    category: editForm.category || '未分类',
+    photos: [...editForm.photos]
   });
   showEditPopup.value = false;
   showToast('修改成功');
+};
+
+const openDetail = (item: DimensionItem) => {
+  detailItem.value = item;
+  showDetailPopup.value = true;
 };
 
 const confirmDelete = (item: DimensionItem) => {
@@ -213,6 +507,30 @@ const handleDelete = async () => {
 .search-section {
   padding: 16px;
   background-color: #f5f6f7;
+}
+
+.category-tags {
+  margin-top: 12px;
+}
+
+.category-tags-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 72px;
+  overflow: hidden;
+}
+
+.category-tags-inner.expanded {
+  max-height: none;
+}
+
+.category-tag {
+  cursor: pointer;
+}
+
+.tag-more {
+  background-color: #f0f0f0 !important;
 }
 
 .list-section {
@@ -247,11 +565,64 @@ const handleDelete = async () => {
   justify-content: flex-end;
 }
 
+.image-upload-section {
+  margin: 16px 0;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.image-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.image-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: #ffffff;
+  border-radius: 50%;
+  padding: 2px;
+  font-size: 14px;
+}
+
+.image-upload-btn {
+  aspect-ratio: 1;
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999999;
+  background-color: #fafafa;
+}
+
+.hidden-input {
+  display: none;
+}
+
 .list-item {
   margin-bottom: 12px;
   background-color: #ffffff;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.list-category-tag {
+  margin-right: 8px;
 }
 
 .swipe-actions {
@@ -281,7 +652,7 @@ const handleDelete = async () => {
 
 .bottom-action {
   position: fixed;
-  bottom: 24px;
+  bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - 32px);
@@ -293,7 +664,8 @@ const handleDelete = async () => {
   box-shadow: 0 4px 16px rgba(74, 108, 247, 0.3);
 }
 
-.edit-popup {
+.edit-popup,
+.detail-popup {
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -323,6 +695,58 @@ const handleDelete = async () => {
   flex: 1;
   padding: 16px;
   overflow-y: auto;
+}
+
+.detail-content {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.detail-info {
+  margin-bottom: 20px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.info-label {
+  color: #999999;
+  font-size: 14px;
+}
+
+.info-value {
+  color: #333333;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.detail-images {
+  margin-top: 16px;
+}
+
+.image-preview-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.preview-image {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
 }
 
 :deep(.van-field__label) {
