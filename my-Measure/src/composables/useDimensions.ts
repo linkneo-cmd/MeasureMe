@@ -22,7 +22,12 @@ export function useDimensions() {
     await loadItems();
   };
 
+  const updateItem = async (id: number, item: Partial<DimensionItem>) => {
+    await db.items.update(id, item);
+    await loadItems();
+  };
+
   onMounted(loadItems);
 
-  return { items, addItem, deleteItem, loadItems };
+  return { items, addItem, deleteItem, updateItem, loadItems };
 }
