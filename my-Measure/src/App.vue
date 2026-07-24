@@ -1,127 +1,142 @@
 <template>
-  <div class="container">
-    <div class="search-section">
-      <van-search
-        v-model="searchKeyword"
-        placeholder="搜索名称、分类、长、宽、高"
-        background="#f5f6f7"
-        shape="round"
-        clearable
-      />
-      <div class="category-tags" v-if="allCategories.length > 0">
-        <div class="category-tags-inner">
-          <van-tag type="default" class="category-tag tag-all" @click="filterByCategory('')">全部</van-tag>
-          <van-tag
-            v-for="cat in displayCategories"
-            :key="cat"
-            :class="['category-tag', `tag-${getCategoryColorIndex(cat)}`]"
-            :type="getCategoryType(cat)"
-            @click="filterByCategory(cat)"
-          >
-            {{ cat }}
-          </van-tag>
-          <van-tag
-            v-if="showMoreTag"
-            class="category-tag tag-more"
-            type="default"
-            @click="toggleCategories"
-          >
-            <van-icon :name="showAllCategories ? 'arrow-down' : 'more-o'" size="14" />
-          </van-tag>
+  <div class="app-container" @touchstart="handleTouchStart" @touchmove="handleTouchMove" @touchend="handleTouchEnd">
+    <div v-if="currentPage === 'home'" class="main-content">
+      <div class="search-section">
+        <van-search
+          v-model="searchKeyword"
+          placeholder="搜索名称、分类、长、宽、高"
+          background="#f5f6f7"
+          shape="round"
+          clearable
+        />
+        <div class="category-tags" v-if="allCategories.length > 0">
+          <div class="category-tags-inner">
+            <van-tag type="default" class="category-tag tag-all" @click="filterByCategory('')">全部</van-tag>
+            <van-tag
+              v-for="cat in displayCategories"
+              :key="cat"
+              :class="['category-tag', `tag-${getCategoryColorIndex(cat)}`]"
+              :type="getCategoryType(cat)"
+              @click="filterByCategory(cat)"
+            >
+              {{ cat }}
+            </van-tag>
+            <van-tag
+              v-if="showMoreTag"
+              class="category-tag tag-more"
+              type="default"
+              @click="toggleCategories"
+            >
+              <van-icon :name="showAllCategories ? 'arrow-down' : 'more-o'" size="14" />
+            </van-tag>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="list-section">
-      <div v-if="showAddForm" class="add-form-section">
-        <van-form @submit="onSubmit" class="inline-add-form">
-          <van-field
-            v-model="form.name"
-            label="物品名称"
-            placeholder="请输入名称"
-            :rules="[{ required: true, message: '请填写名称' }]"
-          />
-          <van-field
-            v-model="form.category"
-            label="分类"
-            placeholder="未分类"
-          />
-          <div class="form-row">
-            <van-field v-model="form.length" label="长" type="digit" placeholder="0" />
-            <van-field v-model="form.width" label="宽" type="digit" placeholder="0" />
-            <van-field v-model="form.height" label="高" type="digit" placeholder="0" />
-          </div>
-          <div class="image-upload-section">
-            <div class="image-grid">
-              <div
-                v-for="(photo, index) in form.photos"
-                :key="index"
-                class="image-item"
-                @click="previewImage(photo)"
-              >
-                <img :src="photo" class="image-thumb" />
-                <van-icon name="cross" class="image-delete" @click.stop="removeFormPhoto(index)" />
-              </div>
-              <div
-                v-if="form.photos.length < 6"
-                class="image-upload-btn"
-                @click="triggerUpload('add')"
-              >
-                <van-icon name="plus" size="24" />
+      <div class="list-section">
+        <div v-if="showAddForm" class="add-form-section">
+          <van-form @submit="onSubmit" class="inline-add-form">
+            <van-field
+              v-model="form.name"
+              label="物品名称"
+              placeholder="请输入名称"
+              :rules="[{ required: true, message: '请填写名称' }]"
+            />
+            <van-field
+              v-model="form.category"
+              label="分类"
+              placeholder="未分类"
+            />
+            <div class="form-row">
+              <van-field v-model="form.length" label="长" type="digit" placeholder="0" />
+              <van-field v-model="form.width" label="宽" type="digit" placeholder="0" />
+              <van-field v-model="form.height" label="高" type="digit" placeholder="0" />
+            </div>
+            <div class="image-upload-section">
+              <div class="image-grid">
+                <div
+                  v-for="(photo, index) in form.photos"
+                  :key="index"
+                  class="image-item"
+                  @click="previewImage(photo)"
+                >
+                  <img :src="photo" class="image-thumb" />
+                  <van-icon name="cross" class="image-delete" @click.stop="removeFormPhoto(index)" />
+                </div>
+                <div
+                  v-if="form.photos.length < 6"
+                  class="image-upload-btn"
+                  @click="triggerUpload('add')"
+                >
+                  <van-icon name="plus" size="24" />
+                </div>
               </div>
             </div>
-          </div>
-          <input
-            ref="addFileInput"
-            type="file"
-            accept="image/*"
-            multiple
-            class="hidden-input"
-            @change="handleAddFileChange"
+            <input
+              ref="addFileInput"
+              type="file"
+              accept="image/*"
+              multiple
+              class="hidden-input"
+              @change="handleAddFileChange"
+            />
+            <div class="form-actions">
+              <van-button type="default" size="small" @click="cancelAdd">取消</van-button>
+              <van-button type="primary" size="small" native-type="submit">确认添加</van-button>
+            </div>
+          </van-form>
+        </div>
+
+        <van-swipe-cell
+          v-for="item in filteredItems"
+          :key="item.id"
+          right-width="120"
+          left-width="120"
+        >
+          <van-cell
+            :title="item.name"
+            :label="`${item.length} × ${item.width} × ${item.height} cm`"
+            class="list-item"
+            @click="openDetail(item)"
           />
-          <div class="form-actions">
-            <van-button type="default" size="small" @click="cancelAdd">取消</van-button>
-            <van-button type="primary" size="small" native-type="submit">确认添加</van-button>
-          </div>
-        </van-form>
+          <template #right>
+            <div class="swipe-actions">
+              <van-button type="primary" size="small" class="edit-btn" @click="openEdit(item)">编辑</van-button>
+              <van-button type="danger" size="small" class="delete-btn" @click="confirmDelete(item)">删除</van-button>
+            </div>
+          </template>
+        </van-swipe-cell>
+        <div v-if="filteredItems.length === 0 && !showAddForm" class="empty-state">
+          <van-empty description="暂无数据" />
+        </div>
       </div>
 
-      <van-swipe-cell
-        v-for="item in filteredItems"
-        :key="item.id"
-        right-width="120"
-        left-width="0"
-      >
-        <van-cell
-          :title="item.name"
-          :label="`${item.length} × ${item.width} × ${item.height} cm`"
-          class="list-item"
-          @click="openDetail(item)"
-        />
-          <!-- <template #right-icon>
-            <van-tag :type="getCategoryType(item.category)" class="list-category-tag">
-              {{ item.category }}
-            </van-tag>
-          </template> -->
-        <!-- </van-cell> -->
-        <template #right>
-          <div class="swipe-actions">
-            <van-button type="primary" size="small" class="edit-btn" @click="openEdit(item)">编辑</van-button>
-            <van-button type="danger" size="small" class="delete-btn" @click="confirmDelete(item)">删除</van-button>
-          </div>
-        </template>
-      </van-swipe-cell>
-      <div v-if="filteredItems.length === 0 && !showAddForm" class="empty-state">
-        <van-empty description="暂无数据" />
+      <div class="bottom-action">
+        <van-button type="primary" size="large" @click="showAddForm = true">
+          记一下
+        </van-button>
+        <div style="margin-top:5px; font-size: 12px; color: #999;">-Author: NeoZhy</div>
       </div>
     </div>
 
-    <div class="bottom-action">
-      <van-button type="primary" size="large" @click="showAddForm = true">
-        记一下
-      </van-button>
-      <div style="margin-top:5px; font-size: 12px; color: #999;">-Author: NeoZhy</div>
-    </div>
+    <QrScanner v-if="currentPage === 'qr-scanner'" @back="goHome" />
+
+    <van-popup
+      v-model:show="showDrawer"
+      position="left"
+      :style="{ width: '75%', height: '100%' }"
+      round
+    >
+      <div class="drawer-content">
+        <div class="drawer-header">
+          <h2>功能菜单</h2>
+        </div>
+        <van-cell-group inset class="drawer-menu">
+          <van-cell title="尺寸记录" icon="records-o" @click="goHome" />
+          <van-cell title="二维码解析" icon="qr" @click="goToQrScanner" />
+        </van-cell-group>
+      </div>
+    </van-popup>
 
     <van-popup
       v-model:show="showEditPopup"
@@ -240,6 +255,14 @@
       confirm-button-color="#ff6b6b"
       @confirm="handleDelete"
     />
+
+    <div
+      ref="triggerRef"
+      class="drawer-trigger" 
+      @click="showDrawer = true"
+    >
+      <van-icon name="bars" size="24" />
+    </div>
   </div>
 </template>
 
@@ -249,8 +272,12 @@ import { useDimensions } from '@/composables/useDimensions';
 import { showToast } from 'vant';
 import type { DimensionItem } from '@/db/dexie';
 import { compressImages } from '@/utils/imageCompressor';
+import QrScanner from '@/pages/QrScanner.vue';
 
 const { items, addItem, deleteItem, updateItem } = useDimensions();
+
+const currentPage = ref<'home' | 'qr-scanner'>('home');
+const showDrawer = ref(false);
 
 const searchKeyword = ref('');
 const selectedCategory = ref('');
@@ -292,6 +319,12 @@ const deletingItem = ref<DimensionItem | null>(null);
 
 const showAllCategories = ref(false);
 const MAX_DISPLAY_CATEGORIES = 8;
+
+const startX = ref(0);
+const startY = ref(0);
+const isTouching = ref(false);
+const SWIPE_THRESHOLD = 80;
+const EDGE_THRESHOLD = 50;
 
 const allCategories = computed(() => {
   const cats = [...new Set(items.value.map(item => item.category))];
@@ -347,6 +380,40 @@ const filteredItems = computed(() => {
   
   return result;
 });
+
+const handleTouchStart = (e: TouchEvent) => {
+  if (currentPage.value !== 'home') return;
+  const touch = e.touches[0];
+  startX.value = touch.clientX;
+  startY.value = touch.clientY;
+  isTouching.value = true;
+};
+
+const handleTouchMove = () => {
+};
+
+const handleTouchEnd = (e: TouchEvent) => {
+  if (!isTouching.value || currentPage.value !== 'home') return;
+  isTouching.value = false;
+  
+  const touch = e.changedTouches[0];
+  const deltaX = touch.clientX - startX.value;
+  const deltaY = touch.clientY - startY.value;
+  
+  if (startX.value <= EDGE_THRESHOLD && deltaX > SWIPE_THRESHOLD && Math.abs(deltaY) < Math.abs(deltaX)) {
+    showDrawer.value = true;
+  }
+};
+
+const goHome = () => {
+  showDrawer.value = false;
+  currentPage.value = 'home';
+};
+
+const goToQrScanner = () => {
+  showDrawer.value = false;
+  currentPage.value = 'qr-scanner';
+};
 
 const filterByCategory = (category: string) => {
   if (selectedCategory.value === category) {
@@ -498,10 +565,29 @@ const handleDelete = async () => {
 </script>
 
 <style scoped>
-.container {
+.app-container {
   min-height: 100vh;
   background-color: #f5f6f7;
+}
+
+.main-content {
   padding-bottom: 100px;
+}
+
+.drawer-trigger {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  left: 16px;
+  z-index: 100;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .search-section {
@@ -519,10 +605,6 @@ const handleDelete = async () => {
   gap: 8px;
   max-height: 72px;
   overflow: hidden;
-}
-
-.category-tags-inner.expanded {
-  max-height: none;
 }
 
 .category-tag {
@@ -621,10 +703,6 @@ const handleDelete = async () => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
-.list-category-tag {
-  margin-right: 8px;
-}
-
 .swipe-actions {
   display: flex;
   align-items: center;
@@ -662,6 +740,28 @@ const handleDelete = async () => {
 .bottom-action .van-button {
   border-radius: 12px;
   box-shadow: 0 4px 16px rgba(74, 108, 247, 0.3);
+}
+
+.drawer-content {
+  height: 100%;
+  background-color: #fff;
+}
+
+.drawer-header {
+  background-color: #4a6cf7;
+  padding: 24px 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.drawer-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.drawer-menu {
+  margin-top: 16px;
 }
 
 .edit-popup,
@@ -761,5 +861,13 @@ const handleDelete = async () => {
 :deep(.van-button--danger) {
   background-color: #ff6b6b;
   border-color: #ff6b6b;
+}
+
+:deep(.van-cell--clickable:active) {
+  background-color: #f5f5f5;
+}
+
+:deep(.drawer-content .van-cell:after) {
+  border-bottom: 0.5px solid;
 }
 </style>

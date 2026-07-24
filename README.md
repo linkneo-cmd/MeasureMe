@@ -15,3 +15,21 @@ npm run build && npx cap sync && cd android && ./gradlew assembleDebug
 
 # 更换图标
 @capacitor/assets 工具是最高效的方式。以后每次想换图标，只需覆盖 assets/icon.png 文件，然后重新执行 npx @capacitor/assets generate --android 和 npx cap sync 即可。
+
+# 1. 修改版本号和APK文件名
+vim android/app/build.gradle
+
+# 2. 修改App显示名称（可选）
+vim android/app/src/main/res/values/strings.xml
+
+# 3. 重新构建
+npm run build
+npx cap sync android
+npx cap build android
+
+
+需求1:可以保留历史记录，历史记录以折叠的形式展示，列表上有一个交互热区，点击后可以展开历史记录。每一条历史记录对应的就是一次点击保存后的快照，按照最后修改时间，倒序展示。历史记录本身也支持弹框展示详情
+需求2:记录的信息，不应该局限于长宽高，可以自定义设置1-9个字段信息属性，每个字段可以设置不同的单位，比如：长、宽、高、重、高、宽、深、重等。如果还需要更多的，以textarea备注的形式记录
+需求3:在记录备注的时候，语音转文字？（感觉是个伪需求，因为现在输入法都自带这些功能）
+需求4：结构体的嵌套形式（难度较大），类似于json的嵌套形式。一条记录的字段信息，可以是另一条记录。比如现在有了一个桌子的记录，我新增了一面墙的记录，墙的记录中可以包含桌子的记录。（这个要想想怎么交互，难点在于怎么展示，以及如何快捷的导航到这里）
+需求5：（这个更难了），类似于VR的效果。比如我看上了一款桌布，然后想看看和已有记录中的桌子结合起来的效果。感觉需要接入多模态的ai模型，另外可能需要一些3D模型的渲染技术。（内部封一个three.js的库等方案）
