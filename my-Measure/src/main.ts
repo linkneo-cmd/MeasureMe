@@ -6,6 +6,7 @@
 import { createApp } from 'vue'
 import './style.css'
 import App from './App.vue'
+import router from './router'
 
 // 1. 引入 Vant 基础样式
 import 'vant/lib/index.css'
@@ -14,6 +15,7 @@ import 'vant/lib/index.css'
 import { Form, Field, Button, List, Cell, Search, SwipeCell, Popup, Icon, Dialog, Empty, Tag, NavBar, CellGroup } from 'vant'
 
 const app = createApp(App)
+app.use(router)
 app.use(Form)
 app.use(Field)
 app.use(Button)

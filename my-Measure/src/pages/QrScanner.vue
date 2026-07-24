@@ -4,7 +4,7 @@
       title="二维码解析"
       left-text="返回"
       left-arrow
-      @click-left="$emit('back')"
+      @click-left="goBack"
     />
 
     <div class="scanner-content">
@@ -64,12 +64,14 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { showToast } from 'vant';
 import jsQR from 'jsqr';
+import { useRouter } from 'vue-router';
 
-const emit = defineEmits<{
-  (e: 'back'): void;
-}>();
-
+const router = useRouter();
 const videoRef = ref<HTMLVideoElement | null>(null);
+
+const goBack = () => {
+  router.back();
+};
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const scanResult = ref('');
