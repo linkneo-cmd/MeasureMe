@@ -8,8 +8,8 @@
     />
 
     <div class="scanner-content">
-      <div class="scan-area">
-        <video ref="videoRef" class="scan-video" autoplay playsinline muted></video>
+      <div v-if="!scanResult" class="scan-area">
+        <video v-if="isWeb" ref="videoRef" class="scan-video" autoplay playsinline muted></video>
         <canvas ref="canvasRef" class="scan-canvas"></canvas>
         <div class="scan-frame">
           <div class="scan-corner top-left"></div>
@@ -22,11 +22,15 @@
       </div>
 
       <div class="action-buttons">
-        <van-button type="default" @click="toggleCamera">
+        <van-button v-if="isWeb && !scanResult" type="default" @click="toggleCamera">
           <van-icon name="switch" />
           切换摄像头
         </van-button>
-        <van-button type="primary" @click="triggerImageUpload">
+        <van-button type="primary" @click="scanQrCode">
+          <van-icon name="camera" />
+          {{ isWeb ? '扫描二维码' : '拍照解析' }}
+        </van-button>
+        <van-button type="default" @click="triggerImageUpload">
           <van-icon name="image" />
           从相册选择
         </van-button>
@@ -61,17 +65,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { showToast } from 'vant';
 import jsQR from 'jsqr';
 import { useRouter } from 'vue-router';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 
 const router = useRouter();
 const videoRef = ref<HTMLVideoElement | null>(null);
-
-const goBack = () => {
-  router.back();
-};
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const scanResult = ref('');
@@ -80,9 +81,22 @@ let stream: MediaStream | null = null;
 let animationId: number | null = null;
 let facingMode: 'user' | 'environment' = 'environment';
 
+const isWeb = computed(() => {
+  if (typeof window !== 'undefined') {
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    return !userAgent.includes('capacitor') && !userAgent.includes('cordova');
+  }
+  return true;
+});
+
+const goBack = () => {
+  router.back();
+};
+
 const startCamera = async () => {
+  if (!isWeb.value) return;
+  
   try {
-    // 先停止当前的摄像头流
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
@@ -97,18 +111,9 @@ const startCamera = async () => {
 
     if (!videoRef.value) return;
 
-    // 绑定视频源
     videoRef.value.srcObject = stream;
-    // 🔥 关键点1：等待视频开始播放（异步等待）
     await videoRef.value.play();
-
-    // 🔥 关键点2：等待视频尺寸非0（有时候 play() 之后还需短暂等待）
-    // await waitForVideoReady(videoRef.value);
-
-    // 现在视频已经准备好，启动扫描循环
     startScanLoop();
-      // videoRef.value.play();
-      // startScanLoop();
     
   } catch (error) {
     showToast('无法访问摄像头，请检查权限');
@@ -163,8 +168,86 @@ const toggleCamera = () => {
   startCamera();
 };
 
+const scanQrCode = async () => {
+  if (scanResult.value) {
+    scanResult.value = '';
+    if (isWeb.value) {
+      startCamera();
+    }
+    return;
+  }
+
+  if (isWeb.value) {
+    if (!stream) {
+      startCamera();
+    } else {
+      captureFrame();
+    }
+    return;
+  }
+
+  try {
+    const image = await Camera.getPhoto({
+      quality: 100,
+      allowEditing: false,
+      resultType: CameraResultType.Base64,
+      source: CameraSource.Camera
+    });
+
+    if (image.base64String) {
+      const base64Data = `data:image/jpeg;base64,${image.base64String}`;
+      await parseQrCodeFromImage(base64Data);
+    }
+  } catch (error) {
+    console.error('Camera error:', error);
+    showToast('拍照失败或已取消');
+  }
+};
+
+const captureFrame = () => {
+  if (!videoRef.value || !canvasRef.value) return;
+
+  const canvas = canvasRef.value;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  canvas.width = videoRef.value.videoWidth;
+  canvas.height = videoRef.value.videoHeight;
+
+  ctx.drawImage(videoRef.value, 0, 0, canvas.width, canvas.height);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+  if (code) {
+    scanResult.value = code.data;
+    showToast('解析成功');
+    stopCamera();
+  } else {
+    showToast('未识别到二维码');
+  }
+};
+
 const triggerImageUpload = () => {
-  fileInput.value?.click();
+  if (isWeb.value) {
+    fileInput.value?.click();
+    return;
+  }
+
+  Camera.getPhoto({
+    quality: 100,
+    allowEditing: false,
+    resultType: CameraResultType.Base64,
+    source: CameraSource.Photos
+  }).then(async (image) => {
+    if (image.base64String) {
+      const base64Data = `data:image/jpeg;base64,${image.base64String}`;
+      await parseQrCodeFromImage(base64Data);
+    }
+  }).catch((error) => {
+    console.error('Gallery error:', error);
+    showToast('选择图片失败');
+  });
 };
 
 const handleImageUpload = (event: Event) => {
@@ -173,12 +256,25 @@ const handleImageUpload = (event: Event) => {
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
+    await parseQrCodeFromImage(e.target?.result as string);
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+};
+
+const parseQrCodeFromImage = async (imageUrl: string) => {
+  return new Promise<void>((resolve) => {
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) {
+        showToast('图片处理失败');
+        resolve();
+        return;
+      }
 
       canvas.width = img.width;
       canvas.height = img.height;
@@ -193,11 +289,14 @@ const handleImageUpload = (event: Event) => {
       } else {
         showToast('未识别到二维码');
       }
+      resolve();
     };
-    img.src = e.target?.result as string;
-  };
-  reader.readAsDataURL(file);
-  input.value = '';
+    img.onerror = () => {
+      showToast('图片加载失败');
+      resolve();
+    };
+    img.src = imageUrl;
+  });
 };
 
 const copyResult = async () => {
@@ -211,7 +310,9 @@ const copyResult = async () => {
 };
 
 onMounted(() => {
-  startCamera();
+  if (isWeb.value) {
+    startCamera();
+  }
 });
 
 onUnmounted(() => {
